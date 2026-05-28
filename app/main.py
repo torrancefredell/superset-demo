@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import logging
+from collections import Counter
 from datetime import datetime, timezone
 
 import httpx
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import Base, engine, get_db
 from app.models import SessionLog
-from app.schemas import SessionLogResponse, WebhookResponse
+from app.schemas import MetricsResponse, SessionLogResponse, WebhookResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,10 +20,17 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Superset Issue Automator",
-    description="Listens for GitHub issue events and triggers Devin sessions to fix them.",
+    description=(
+        "Event-driven automation that listens for GitHub issue events "
+        "and triggers Devin AI sessions to remediate them."
+    ),
     version="1.0.0",
 )
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def verify_github_signature(payload_body: bytes, signature: str | None) -> bool:
     if not settings.github_webhook_secret:
@@ -37,22 +45,39 @@ def verify_github_signature(payload_body: bytes, signature: str | None) -> bool:
     return hmac.compare_digest(f"sha256={expected}", signature)
 
 
-async def create_devin_session(prompt: str) -> dict:
-    url = (
-        f"{settings.devin_api_base_url}"
-        f"/organizations/{settings.devin_org_id}/sessions"
-    )
+async def call_devin_api(method: str, path: str, json_body: dict | None = None) -> dict:
+    url = f"{settings.devin_api_base_url}{path}"
     headers = {
         "Authorization": f"Bearer {settings.devin_api_token}",
         "Content-Type": "application/json",
     }
-    body = {"prompt": prompt}
-
     async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(url, json=body, headers=headers)
+        if method == "GET":
+            response = await client.get(url, headers=headers)
+        else:
+            response = await client.post(url, json=json_body, headers=headers)
         response.raise_for_status()
         return response.json()
 
+
+def map_devin_status(status: str, status_detail: str | None) -> str:
+    """Map Devin API status/status_detail to a human-readable label."""
+    if status == "exit" and status_detail == "finished":
+        return "completed"
+    if status == "error":
+        return "failed"
+    if status in ("running", "claimed", "resuming"):
+        return "running"
+    if status == "suspended":
+        return "blocked"
+    if status == "new":
+        return "started"
+    return status
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 
 @app.post("/webhook", response_model=WebhookResponse)
 async def github_webhook(
@@ -95,7 +120,11 @@ async def github_webhook(
     logger.info("Creating Devin session for issue #%s: %s", issue_number, issue_title)
 
     try:
-        devin_response = await create_devin_session(prompt)
+        devin_response = await call_devin_api(
+            "POST",
+            f"/organizations/{settings.devin_org_id}/sessions",
+            {"prompt": prompt},
+        )
     except httpx.HTTPStatusError as exc:
         logger.error("Devin API error: %s – %s", exc.response.status_code, exc.response.text)
         raise HTTPException(
@@ -114,8 +143,9 @@ async def github_webhook(
         github_issue_title=issue_title,
         devin_session_id=devin_session_id,
         devin_session_url=devin_session_url,
-        status="Started",
+        status="started",
         created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     db.add(log_entry)
     db.commit()
@@ -135,8 +165,101 @@ async def github_webhook(
 
 @app.get("/status", response_model=list[SessionLogResponse])
 def get_status(db: Session = Depends(get_db)) -> list[SessionLogResponse]:
+    """Return all session logs, newest first."""
     logs = db.query(SessionLog).order_by(SessionLog.created_at.desc()).all()
     return [SessionLogResponse.model_validate(log) for log in logs]
+
+
+@app.get("/metrics", response_model=MetricsResponse)
+def get_metrics(db: Session = Depends(get_db)) -> MetricsResponse:
+    """
+    Aggregated analytics for engineering leadership.
+
+    Returns total sessions, breakdown by status, success rate,
+    and how many sessions produced pull requests.
+    """
+    logs = db.query(SessionLog).all()
+    total = len(logs)
+    status_counts: dict[str, int] = dict(Counter(log.status for log in logs))
+    completed = status_counts.get("completed", 0)
+    failed = status_counts.get("failed", 0)
+    decided = completed + failed
+    success_rate = f"{(completed / decided * 100):.1f}%" if decided > 0 else "N/A (no completed sessions)"
+    sessions_with_prs = sum(1 for log in logs if log.pull_request_url)
+
+    latest = (
+        db.query(SessionLog)
+        .order_by(SessionLog.created_at.desc())
+        .first()
+    )
+
+    return MetricsResponse(
+        total_sessions=total,
+        by_status=status_counts,
+        success_rate=success_rate,
+        sessions_with_prs=sessions_with_prs,
+        latest_session=SessionLogResponse.model_validate(latest) if latest else None,
+    )
+
+
+@app.post("/sessions/refresh")
+async def refresh_sessions(db: Session = Depends(get_db)) -> dict:
+    """
+    Poll the Devin API for each active session and update its status.
+
+    This lets an operator (or a cron job) keep the local database
+    in sync with Devin's actual progress without manual intervention.
+    """
+    active_logs = (
+        db.query(SessionLog)
+        .filter(SessionLog.status.in_(["started", "running", "blocked"]))
+        .all()
+    )
+
+    if not active_logs:
+        return {"updated": 0, "message": "No active sessions to refresh"}
+
+    updated_count = 0
+    errors: list[str] = []
+
+    for log in active_logs:
+        try:
+            session_data = await call_devin_api(
+                "GET",
+                f"/organizations/{settings.devin_org_id}/sessions/{log.devin_session_id}",
+            )
+            new_status = map_devin_status(
+                session_data.get("status", ""),
+                session_data.get("status_detail"),
+            )
+            new_detail = session_data.get("status_detail")
+            prs = session_data.get("pull_requests", [])
+            pr_url = prs[0].get("url", "") if prs else None
+
+            if log.status != new_status or log.pull_request_url != pr_url:
+                log.status = new_status
+                log.status_detail = new_detail
+                if pr_url:
+                    log.pull_request_url = pr_url
+                log.updated_at = datetime.now(timezone.utc)
+                updated_count += 1
+
+                logger.info(
+                    "Session %s updated: status=%s, pr=%s",
+                    log.devin_session_id, new_status, pr_url,
+                )
+
+        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            errors.append(f"{log.devin_session_id}: {exc}")
+            logger.warning("Failed to refresh session %s: %s", log.devin_session_id, exc)
+
+    db.commit()
+
+    return {
+        "updated": updated_count,
+        "checked": len(active_logs),
+        "errors": errors,
+    }
 
 
 @app.get("/health")
