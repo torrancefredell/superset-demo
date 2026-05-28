@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.db
+.venv/
+venv/
+.git/
+.gitignore
+test-plan.md
+test-report.md
