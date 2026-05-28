@@ -27,6 +27,8 @@ app = FastAPI(
     version="1.0.0",
 )
 
+TRIGGER_PREFIX = "/devin"
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -75,50 +77,13 @@ def map_devin_status(status: str, status_detail: str | None) -> str:
     return status
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
-
-@app.post("/webhook", response_model=WebhookResponse)
-async def github_webhook(
-    request: Request,
-    x_github_event: str | None = Header(None),
-    x_hub_signature_256: str | None = Header(None),
-    db: Session = Depends(get_db),
+async def create_and_log_session(
+    prompt: str,
+    issue_number: int,
+    issue_title: str,
+    db: Session,
 ) -> WebhookResponse:
-    body = await request.body()
-
-    if not verify_github_signature(body, x_hub_signature_256):
-        raise HTTPException(status_code=401, detail="Invalid signature")
-
-    payload = await request.json()
-
-    if x_github_event != "issues":
-        return WebhookResponse(message=f"Ignored event: {x_github_event}")
-
-    action = payload.get("action")
-    if action != "opened":
-        return WebhookResponse(message=f"Ignored action: {action}")
-
-    issue = payload.get("issue", {})
-    issue_number = issue.get("number")
-    issue_title = issue.get("title", "")
-    issue_body = issue.get("body", "") or ""
-    repo_full_name = payload.get("repository", {}).get("full_name", "")
-    repo_url = payload.get("repository", {}).get("html_url", settings.target_repo_url)
-
-    prompt = (
-        f"A new GitHub issue has been opened in {repo_full_name}.\n\n"
-        f"Issue #{issue_number}: {issue_title}\n\n"
-        f"Description:\n{issue_body}\n\n"
-        f"Please:\n"
-        f"1. Clone the repository: {repo_url}\n"
-        f"2. Analyze the issue and implement a fix\n"
-        f"3. Open a pull request with the fix, referencing issue #{issue_number}"
-    )
-
-    logger.info("Creating Devin session for issue #%s: %s", issue_number, issue_title)
-
+    """Call the Devin API, persist a SessionLog, and return a response."""
     try:
         devin_response = await call_devin_api(
             "POST",
@@ -126,7 +91,7 @@ async def github_webhook(
             {"prompt": prompt},
         )
     except httpx.HTTPStatusError as exc:
-        logger.error("Devin API error: %s – %s", exc.response.status_code, exc.response.text)
+        logger.error("Devin API error: %s - %s", exc.response.status_code, exc.response.text)
         raise HTTPException(
             status_code=502,
             detail=f"Devin API returned {exc.response.status_code}",
@@ -161,6 +126,102 @@ async def github_webhook(
         devin_session_id=devin_session_id,
         github_issue_number=issue_number,
     )
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/webhook", response_model=WebhookResponse)
+async def github_webhook(
+    request: Request,
+    x_github_event: str | None = Header(None),
+    x_hub_signature_256: str | None = Header(None),
+    db: Session = Depends(get_db),
+) -> WebhookResponse:
+    body = await request.body()
+
+    if not verify_github_signature(body, x_hub_signature_256):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    payload = await request.json()
+
+    if x_github_event == "issue_comment":
+        return await _handle_issue_comment(payload, db)
+
+    if x_github_event == "issues":
+        return await _handle_issue_opened(payload, db)
+
+    return WebhookResponse(message=f"Ignored event: {x_github_event}")
+
+
+async def _handle_issue_opened(payload: dict, db: Session) -> WebhookResponse:
+    """Handle issues/opened events (original trigger)."""
+    action = payload.get("action")
+    if action != "opened":
+        return WebhookResponse(message=f"Ignored action: {action}")
+
+    issue = payload.get("issue", {})
+    issue_number = issue.get("number")
+    issue_title = issue.get("title", "")
+    issue_body = issue.get("body", "") or ""
+    repo_full_name = payload.get("repository", {}).get("full_name", "")
+    repo_url = payload.get("repository", {}).get("html_url", settings.target_repo_url)
+
+    prompt = (
+        f"A new GitHub issue has been opened in {repo_full_name}.\n\n"
+        f"Issue #{issue_number}: {issue_title}\n\n"
+        f"Description:\n{issue_body}\n\n"
+        f"Please:\n"
+        f"1. Clone the repository: {repo_url}\n"
+        f"2. Analyze the issue and implement a fix\n"
+        f"3. Open a pull request with the fix, referencing issue #{issue_number}"
+    )
+
+    logger.info("Creating Devin session for issue #%s: %s", issue_number, issue_title)
+    return await create_and_log_session(prompt, issue_number, issue_title, db)
+
+
+async def _handle_issue_comment(payload: dict, db: Session) -> WebhookResponse:
+    """Handle issue_comment/created events triggered by /devin commands."""
+    action = payload.get("action")
+    if action != "created":
+        return WebhookResponse(message=f"Ignored action: {action}")
+
+    comment_body = payload.get("comment", {}).get("body", "") or ""
+    if not comment_body.startswith(TRIGGER_PREFIX):
+        return WebhookResponse(message="Comment does not start with /devin, ignored")
+
+    instructions = comment_body[len(TRIGGER_PREFIX):].strip()
+    if not instructions:
+        return WebhookResponse(message="No instructions after /devin, ignored")
+
+    issue = payload.get("issue", {})
+    issue_number = issue.get("number")
+    issue_title = issue.get("title", "")
+    issue_body = issue.get("body", "") or ""
+    repo_full_name = payload.get("repository", {}).get("full_name", "")
+    repo_url = payload.get("repository", {}).get("html_url", settings.target_repo_url)
+    commenter = payload.get("comment", {}).get("user", {}).get("login", "unknown")
+
+    prompt = (
+        f"An engineer (@{commenter}) requested help on an issue in {repo_full_name} "
+        f"via a /devin command.\n\n"
+        f"Issue #{issue_number}: {issue_title}\n\n"
+        f"Original issue description:\n{issue_body}\n\n"
+        f"Instructions from the comment:\n{instructions}\n\n"
+        f"Please:\n"
+        f"1. Clone the repository: {repo_url}\n"
+        f"2. Follow the instructions above to address the issue\n"
+        f"3. Open a pull request with the fix, referencing issue #{issue_number}"
+    )
+
+    logger.info(
+        "Creating Devin session from /devin comment by %s on issue #%s",
+        commenter,
+        issue_number,
+    )
+    return await create_and_log_session(prompt, issue_number, issue_title, db)
 
 
 @app.get("/status", response_model=list[SessionLogResponse])
