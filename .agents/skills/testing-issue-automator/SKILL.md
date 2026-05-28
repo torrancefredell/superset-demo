@@ -87,32 +87,69 @@ curl http://localhost:8000/status
 # Expected: [] HTTP 200
 ```
 
-### 3. Event filtering
+### 3. Event filtering (issues)
 ```bash
 # Non-issue events are ignored
 curl -X POST http://localhost:8000/webhook -H "Content-Type: application/json" -H "X-GitHub-Event: ping" -d '{"zen":"test"}'
 # Expected: {"message":"Ignored event: ping",...}
 
 # Non-opened actions are ignored
-curl -X POST http://localhost:8000/webhook -H "Content-Type: application/json" -H "X-GitHub-Event: issues" -d '{"action":"closed",...}'
+curl -X POST http://localhost:8000/webhook -H "Content-Type: application/json" -H "X-GitHub-Event: issues" -d '{"action":"closed","issue":{"number":1,"title":"T","body":"B"},"repository":{"full_name":"t/r","html_url":"https://github.com/t/r"}}'
 # Expected: {"message":"Ignored action: closed",...}
 ```
 
-### 4. Happy path (with mock)
+### 4. Happy path — issues/opened (with mock)
 ```bash
 curl -X POST http://localhost:8000/webhook -H "Content-Type: application/json" -H "X-GitHub-Event: issues" \
   -d '{"action":"opened","issue":{"number":42,"title":"Test","body":"desc"},"repository":{"full_name":"t/r","html_url":"https://github.com/t/r"}}'
 # Expected: {"message":"Devin session created","devin_session_id":"devin-mock123","github_issue_number":42}
 # Then GET /status should show the logged entry
+# Verify mock log prompt contains "A new GitHub issue has been opened"
 ```
 
-### 5. Error handling
+### 5. Happy path — /devin comment trigger (with mock)
+```bash
+curl -X POST http://localhost:8000/webhook -H "Content-Type: application/json" -H "X-GitHub-Event: issue_comment" \
+  -d '{"action":"created","comment":{"body":"/devin please fix this issue","user":{"login":"testuser"}},"issue":{"number":99,"title":"Bug report","body":"Something is broken"},"repository":{"full_name":"t/r","html_url":"https://github.com/t/r"}}'
+# Expected: {"message":"Devin session created","devin_session_id":"devin-mock123","github_issue_number":99}
+# Verify mock log prompt contains:
+#   - "@testuser" (commenter username)
+#   - "Instructions from the comment" section
+#   - "please fix this issue" (extracted instructions)
+#   - "Issue #99" (parent issue number)
+#   - "Something is broken" (original issue body)
+```
+
+### 6. Comment trigger edge cases
+```bash
+# Comment without /devin prefix — ignored
+curl -X POST http://localhost:8000/webhook -H "Content-Type: application/json" -H "X-GitHub-Event: issue_comment" \
+  -d '{"action":"created","comment":{"body":"just a comment","user":{"login":"someone"}},"issue":{"number":1,"title":"T","body":"B"},"repository":{"full_name":"t/r","html_url":"https://github.com/t/r"}}'
+# Expected: {"message":"Comment does not start with /devin, ignored",...}
+
+# /devin with no instructions — ignored
+curl -X POST http://localhost:8000/webhook -H "Content-Type: application/json" -H "X-GitHub-Event: issue_comment" \
+  -d '{"action":"created","comment":{"body":"/devin","user":{"login":"someone"}},"issue":{"number":1,"title":"T","body":"B"},"repository":{"full_name":"t/r","html_url":"https://github.com/t/r"}}'
+# Expected: {"message":"No instructions after /devin, ignored",...}
+
+# /devin with only whitespace — ignored
+curl -X POST http://localhost:8000/webhook -H "Content-Type: application/json" -H "X-GitHub-Event: issue_comment" \
+  -d '{"action":"created","comment":{"body":"/devin   ","user":{"login":"someone"}},"issue":{"number":1,"title":"T","body":"B"},"repository":{"full_name":"t/r","html_url":"https://github.com/t/r"}}'
+# Expected: {"message":"No instructions after /devin, ignored",...}
+
+# issue_comment with action != created — ignored
+curl -X POST http://localhost:8000/webhook -H "Content-Type: application/json" -H "X-GitHub-Event: issue_comment" \
+  -d '{"action":"edited","comment":{"body":"/devin fix it","user":{"login":"someone"}},"issue":{"number":1,"title":"T","body":"B"},"repository":{"full_name":"t/r","html_url":"https://github.com/t/r"}}'
+# Expected: {"message":"Ignored action: edited",...}
+```
+
+### 7. Error handling
 ```bash
 # Point DEVIN_API_BASE_URL at a dead port to test 502
 # Expected: {"detail":"Failed to reach Devin API"} HTTP 502
 ```
 
-### 6. Signature verification
+### 8. Signature verification
 ```bash
 # Set GITHUB_WEBHOOK_SECRET=testsecret123
 # Send with invalid X-Hub-Signature-256 header
@@ -125,14 +162,18 @@ SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "testsecret123" | awk '{print
 # Expected: HTTP 200
 ```
 
-### 7. Validate Devin API request
+### 9. Validate Devin API request
 Check `/tmp/mock_requests.json` to verify:
 - Path contains `/v3/organizations/{org_id}/sessions`
 - Auth header is `Bearer {token}`
-- Body prompt contains issue number, title, description, and repo URL
+- For issues/opened: prompt contains issue number, title, description, and repo URL with phrasing "A new GitHub issue has been opened"
+- For /devin comments: prompt contains commenter username, extracted instructions, parent issue metadata with phrasing "via a /devin command"
 
-## Notes
+## Important Testing Notes
 
 - This is a shell-only API app — no browser UI, so no screen recording needed
 - Delete `devin_sessions.db` between test runs for a clean state
 - The app uses Pydantic Settings with `.env` file support — env vars override `.env`
+- When verifying prompt content, check `/tmp/mock_requests.json` — each line is a JSON object with `path`, `auth`, and `body` fields
+- The `/devin` trigger uses `startswith("/devin")` — so `/devinfix` (no space) would also match. The instructions are extracted via `comment_body[len("/devin"):].strip()`
+- After running edge case tests (tests 3, 6), always verify `/status` entry count hasn't changed to confirm no spurious DB writes
