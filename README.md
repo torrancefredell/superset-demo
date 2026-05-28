@@ -50,7 +50,7 @@ For the three issue categories selected in this project — outdated dependencie
 
 | Requirement | How This Project Satisfies It |
 |---|---|
-| **Part 2 — Event trigger** | GitHub webhook fires on every `issues.opened` event → `POST /webhook` |
+| **Part 2 — Event trigger** | GitHub webhook fires on `issues.opened` events and `issue_comment.created` events containing a `/devin` command → `POST /webhook` |
 | **Part 2 — Programmatic session management** | The app calls `POST /v3/organizations/{org_id}/sessions` with a structured prompt containing the issue title, description, and repo URL |
 | **Part 2 — Observable outputs** | Devin creates pull requests that close the original issues; PRs are visible in the fork |
 | **Part 3 — Status of tasks** | `GET /status` returns every session with its current state (`started`, `running`, `completed`, `failed`, `blocked`) |
@@ -65,7 +65,7 @@ For the three issue categories selected in this project — outdated dependencie
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/webhook` | Receives GitHub webhook payloads. Filters for `issues`/`opened` events, validates HMAC-SHA256 signature, creates a Devin session, and logs it. |
+| `POST` | `/webhook` | Receives GitHub webhook payloads. Handles `issues`/`opened` events and `issue_comment`/`created` events with a `/devin` trigger. Validates HMAC-SHA256 signature, creates a Devin session, and logs it. |
 | `GET` | `/status` | Returns all session logs as JSON (newest first). Each entry includes issue number, Devin session ID, status, PR URL, and timestamps. |
 | `GET` | `/metrics` | Aggregated dashboard: total sessions, status breakdown, success rate, sessions with PRs, and the latest session. |
 | `POST` | `/sessions/refresh` | Polls the Devin API for every active session and syncs status + PR URLs back to the local database. |
@@ -145,6 +145,30 @@ curl -X POST http://localhost:8000/webhook \
   }'
 ```
 
+You can also trigger a session via a simulated issue comment with the `/devin` prefix:
+
+```bash
+curl -X POST http://localhost:8000/webhook \
+  -H "Content-Type: application/json" \
+  -H "X-GitHub-Event: issue_comment" \
+  -d '{
+    "action": "created",
+    "comment": {
+      "body": "/devin Please fix this by updating the pinned version to 2.3.3",
+      "user": { "login": "torrancefredell" }
+    },
+    "issue": {
+      "number": 1,
+      "title": "Bump pandas from 2.1.4 to 2.3.x in requirements/base.txt",
+      "body": "The pandas dependency is pinned at 2.1.4. Please update to 2.3.3."
+    },
+    "repository": {
+      "full_name": "torrancefredell/superset",
+      "html_url": "https://github.com/torrancefredell/superset"
+    }
+  }'
+```
+
 Then check the results:
 
 ```bash
@@ -198,7 +222,7 @@ To connect this to a real repository:
 2. **Payload URL**: Your server's public URL + `/webhook` (e.g., `https://your-server.com/webhook`)
 3. **Content type**: `application/json`
 4. **Secret**: Same value as `GITHUB_WEBHOOK_SECRET` in your `.env`
-5. **Events**: Select **Issues**
+5. **Events**: Select **Issues** and **Issue comments**
 
 For local development, use [ngrok](https://ngrok.com) to expose your local server:
 
