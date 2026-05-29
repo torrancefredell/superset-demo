@@ -31,17 +31,35 @@ By connecting CodeQL scanning directly to an AI agent, every newly discovered vu
 └─────────────┘                            │  /health             │
                                             └──────┬───────────────┘
                                                    │
-                                    Devin API       │
-                                  (POST session)    │
+                                          Compute branch name:
+                                        security/alert-<ALERT_NUMBER>
+                                                   │
+                                            Devin API
+                                          (POST session)
                                                    │
                                             ┌──────▼───────────────┐
                                             │  Devin AI            │
                                             │  - clones repo       │
-                                            │  - analyzes vuln     │
+                                            │  - checks out branch │
                                             │  - remediates code   │
-                                            │  - opens PR          │
+                                            │  - pushes + opens PR │
                                             └──────────────────────┘
 ```
+
+### Git-Native Deduplication
+
+Duplicate PRs are prevented without any GitHub API tokens or state management. The gateway computes a **deterministic branch name** from the alert number:
+
+```
+security/alert-<ALERT_NUMBER>
+```
+
+The Devin prompt instructs the agent to:
+1. Check if `security/alert-N` already exists on the remote.
+2. If it exists → check it out and push new commits (which automatically appear in the existing PR).
+3. If it does not exist → create it from `master`, apply the fix, and open a new PR.
+
+This means webhook redeliveries and reopened alerts all push to the same branch, and GitHub natively aggregates commits into the same PR. No API tokens, no state, no race conditions.
 
 ### How It Maps to the Challenge Requirements
 
@@ -212,10 +230,17 @@ Review Link: [Alert HTML URL]
 
 Please:
 1. Clone the repository
-2. Analyze the insecure code pattern inside the target file
-3. Remediate the vulnerability safely according to modern secure coding principles
-4. Ensure the codebase builds and tests pass
-5. Open a secure Pull Request referencing this automated remediation
+2. Check if the remote branch 'security/alert-N' already exists:
+   - If it exists: check it out
+   - If it does not exist: create it from master
+3. Analyze the insecure code pattern inside the target file
+4. Remediate the vulnerability safely according to modern secure coding principles
+5. Ensure the codebase builds and tests pass
+6. Push your commits to the branch 'security/alert-N'
+7. If no PR exists for this branch yet, open one with the exact title:
+   'Fix: [Rule Description]'
+   If a PR already exists, do NOT open a new one — pushed commits
+   will appear in the existing PR automatically.
 ```
 
 ---

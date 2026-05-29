@@ -55,6 +55,8 @@ def build_remediation_prompt(
     tool_name: str,
     file_path: str,
     alert_url: str,
+    alert_number: int,
+    branch_name: str,
     repo_url: str,
 ) -> str:
     return (
@@ -64,14 +66,22 @@ def build_remediation_prompt(
         f"Vulnerability Type: {rule_description}\n"
         f"Target File Location: {file_path}\n"
         f"Review Link: {alert_url}\n\n"
-        f"Please:\n"
+        "Please:\n"
         f"1. Clone the repository: {repo_url}\n"
-        f"2. Analyze the insecure code pattern inside the target file\n"
-        f"3. Remediate the vulnerability safely according to modern "
-        f"secure coding principles\n"
-        f"4. Ensure the codebase builds and tests pass\n"
-        f"5. Open a Pull Request with the exact title: "
-        f"'Fix: {rule_description}'"
+        f"2. Check if the remote branch '{branch_name}' already exists:\n"
+        f"   - If it exists: check it out with "
+        f"'git checkout {branch_name}'\n"
+        f"   - If it does not exist: create it from master with "
+        f"'git checkout -b {branch_name} origin/master'\n"
+        "3. Analyze the insecure code pattern inside the target file\n"
+        "4. Remediate the vulnerability safely according to modern "
+        "secure coding principles\n"
+        "5. Ensure the codebase builds and tests pass\n"
+        f"6. Push your commits to the branch '{branch_name}'\n"
+        "7. If no Pull Request exists for this branch yet, open one with "
+        f"the exact title: 'Fix: {rule_description}'\n"
+        "   If a PR already exists, do NOT open a new one — "
+        "your pushed commits will appear in the existing PR automatically."
     )
 
 
@@ -119,19 +129,24 @@ async def _handle_code_scanning_alert(payload: dict) -> WebhookResponse:
     tool_name = alert.get("tool", {}).get("name", "CodeQL")
     repo_url = payload.get("repository", {}).get("html_url", settings.target_repo_url)
 
+    branch_name = f"security/alert-{alert_number}"
+
     prompt = build_remediation_prompt(
         rule_description=rule_description,
         tool_name=tool_name,
         file_path=file_path,
         alert_url=alert_url,
+        alert_number=alert_number,
+        branch_name=branch_name,
         repo_url=repo_url,
     )
 
     logger.info(
-        "Creating Devin session for CodeQL alert #%s: %s in %s",
+        "Creating Devin session for CodeQL alert #%s: %s in %s → branch %s",
         alert_number,
         rule_description,
         file_path,
+        branch_name,
     )
 
     try:
