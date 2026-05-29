@@ -97,10 +97,13 @@ async def github_webhook(
     return WebhookResponse(message=f"Ignored event: {x_github_event}")
 
 
+_ACTIONABLE = {"created", "reopened_by_user"}
+
+
 async def _handle_code_scanning_alert(payload: dict) -> WebhookResponse:
-    """Handle code_scanning_alert/created events from CodeQL."""
+    """Handle code_scanning_alert events from CodeQL."""
     action = payload.get("action")
-    if action != "created":
+    if action not in _ACTIONABLE:
         return WebhookResponse(message=f"Ignored action: {action}")
 
     alert = payload.get("alert", {})
