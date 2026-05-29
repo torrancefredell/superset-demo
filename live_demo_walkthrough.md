@@ -26,7 +26,7 @@
 - A mix of rule types and a few alerts with old "first detected" dates.
 
 **Narrative (say this):**
-> "Before we trigger anything, I want you to see the starting line. This is our Code Scanning queue on the Superset fork — and every row here is security debt that's been sitting and aging. Under the old model, a finding like this clear-text logging issue waits weeks for a human to triage it, because the moment someone picks it up, a feature sprint stalls. So nobody does. The list just grows. Hold that picture in your mind — because in about ninety seconds, one of these is going to fix itself."
+> "I don't need to explain this screen to you — you already live it. Every one of you has a queue that looks exactly like this in your own org, and the fact that it exists is proof your investment in CodeQL is working. Your scanners are doing their job: they find the bugs. Here's the quiet part nobody says out loud — finding is where most security tooling stops. It surfaces the vulnerability and then hands it back to a human, so these alerts just sit, aging for weeks, sometimes months. And the reason they sit is a tradeoff you make every single day: the only way to clear one is to pull a senior developer off a high-value feature, and the instant you do that, your product roadmap stalls. So we're not here to replace any of this. We're not swapping out CodeQL or your security stack. We're adding the layer that sits *on top* of it — the one that finally drains this backlog. Let me show you what that looks like the moment an alert fires."
 
 ---
 
