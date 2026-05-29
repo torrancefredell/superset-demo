@@ -8,8 +8,29 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from app.config import settings
 from app.schemas import WebhookResponse
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 logger = logging.getLogger(__name__)
+
+# Prefix used for all observability events so engineering leaders can filter
+# the log stream with a simple `grep OBSERVABILITY` (or route it into Loki/
+# Datadog). Each line is a flat key=value record describing one lifecycle
+# stage of a remediation task.
+_OBS = "[OBSERVABILITY]"
+
+
+def _log_event(level: int, event: str, **fields: object) -> None:
+    """Emit one structured, greppable observability log line."""
+    parts = [f"{_OBS} event={event}"]
+    for key, value in fields.items():
+        if value is None:
+            continue
+        text = str(value)
+        parts.append(f'{key}="{text}"' if " " in text else f"{key}={text}")
+    logger.log(level, " ".join(parts))
+
 
 app = FastAPI(
     title="Superset Security Remediator",
@@ -102,9 +123,22 @@ async def github_webhook(
 
     payload = await request.json()
 
+    _log_event(
+        logging.INFO,
+        "webhook_received",
+        github_event=x_github_event,
+        action=payload.get("action"),
+    )
+
     if x_github_event == "code_scanning_alert":
         return await _handle_code_scanning_alert(payload)
 
+    _log_event(
+        logging.INFO,
+        "webhook_ignored",
+        reason="unhandled_event",
+        github_event=x_github_event,
+    )
     return WebhookResponse(message=f"Ignored event: {x_github_event}")
 
 
@@ -115,6 +149,12 @@ async def _handle_code_scanning_alert(payload: dict) -> WebhookResponse:
     """Handle code_scanning_alert events from CodeQL."""
     action = payload.get("action")
     if action not in _ACTIONABLE:
+        _log_event(
+            logging.INFO,
+            "webhook_ignored",
+            reason="non_actionable_action",
+            action=action,
+        )
         return WebhookResponse(message=f"Ignored action: {action}")
 
     alert = payload.get("alert", {})
@@ -131,6 +171,16 @@ async def _handle_code_scanning_alert(payload: dict) -> WebhookResponse:
 
     branch_name = f"security/alert-{alert_number}"
 
+    _log_event(
+        logging.INFO,
+        "alert_parsed",
+        alert_number=alert_number,
+        rule=rule_description,
+        tool=tool_name,
+        file=file_path,
+        branch=branch_name,
+    )
+
     prompt = build_remediation_prompt(
         rule_description=rule_description,
         tool_name=tool_name,
@@ -141,28 +191,37 @@ async def _handle_code_scanning_alert(payload: dict) -> WebhookResponse:
         repo_url=repo_url,
     )
 
-    logger.info(
-        "Creating Devin session for CodeQL alert #%s: %s in %s → branch %s",
-        alert_number,
-        rule_description,
-        file_path,
-        branch_name,
+    _log_event(
+        logging.INFO,
+        "devin_dispatch_start",
+        status="dispatching",
+        alert_number=alert_number,
+        branch=branch_name,
     )
 
     try:
         devin_response = await call_devin_api(prompt)
     except httpx.HTTPStatusError as exc:
-        logger.error(
-            "Devin API error: %s - %s",
-            exc.response.status_code,
-            exc.response.text,
+        _log_event(
+            logging.ERROR,
+            "devin_dispatch_failure",
+            status="failed",
+            alert_number=alert_number,
+            error_type="http_status",
+            status_code=exc.response.status_code,
         )
         raise HTTPException(
             status_code=502,
             detail=f"Devin API returned {exc.response.status_code}",
         ) from exc
     except httpx.RequestError as exc:
-        logger.error("Devin API request failed: %s", exc)
+        _log_event(
+            logging.ERROR,
+            "devin_dispatch_failure",
+            status="failed",
+            alert_number=alert_number,
+            error_type="request_error",
+        )
         raise HTTPException(
             status_code=502,
             detail="Failed to reach Devin API",
@@ -171,7 +230,14 @@ async def _handle_code_scanning_alert(payload: dict) -> WebhookResponse:
     devin_session_id = devin_response.get("devin_id", "")
     devin_session_url = devin_response.get("url", "")
 
-    logger.info("Devin session created: %s", devin_session_id)
+    _log_event(
+        logging.INFO,
+        "devin_dispatch_success",
+        status="dispatched",
+        alert_number=alert_number,
+        session_id=devin_session_id,
+        session_url=devin_session_url,
+    )
 
     return WebhookResponse(
         message="Devin remediation session created",
