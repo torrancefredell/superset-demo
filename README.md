@@ -31,17 +31,47 @@ By connecting CodeQL scanning directly to an AI agent, every newly discovered vu
 └─────────────┘                            │  /health             │
                                             └──────┬───────────────┘
                                                    │
-                                    Devin API       │
-                                  (POST session)    │
+                                        ┌──────────▼──────────┐
+                                        │ Duplicate PR Check  │
+                                        │ (GitHub API)        │
+                                        └──────────┬──────────┘
                                                    │
-                                            ┌──────▼───────────────┐
-                                            │  Devin AI            │
-                                            │  - clones repo       │
-                                            │  - analyzes vuln     │
-                                            │  - remediates code   │
-                                            │  - opens PR          │
-                                            └──────────────────────┘
+                                    ┌──────────────┼──────────────┐
+                                    │ No match     │ Match found  │
+                                    ▼              ▼              │
+                            ┌──────────────┐ ┌──────────────┐    │
+                            │ New PR path  │ │ Update path  │    │
+                            │ Create fresh │ │ Push to      │    │
+                            │ branch + PR  │ │ existing     │    │
+                            └──────┬───────┘ │ branch       │    │
+                                   │         └──────┬───────┘    │
+                                   └────────────────┘            │
+                                            │                    │
+                                    Devin API                    │
+                                  (POST session)                 │
+                                            │                    │
+                                    ┌───────▼──────────────┐     │
+                                    │  Devin AI            │     │
+                                    │  - clones repo       │     │
+                                    │  - analyzes vuln     │     │
+                                    │  - remediates code   │     │
+                                    │  - opens/updates PR  │     │
+                                    └──────────────────────┘     │
 ```
+
+### Deduplication via Alert Tags
+
+When the gateway processes a new `code_scanning_alert`, it checks for duplicate PRs before dispatching:
+
+1. **Tag injection**: New PRs include a hidden HTML tag at the bottom of the description: `<!-- CODEQL_ALERT:N -->` (where N is the CodeQL alert number).
+2. **Lookup**: On each webhook, the gateway fetches open PRs via the GitHub API and searches their body text for the matching alert tag.
+3. **Two execution paths**:
+   - **No match found** → Create a fresh branch and open a new PR.
+   - **Match found** → Dispatch Devin to push commits to the existing branch, updating the fix in-place without opening a duplicate PR.
+
+This prevents duplicate PRs from spawning when webhooks are redelivered or alerts are reopened.
+
+> **Note**: Deduplication requires `GITHUB_TOKEN` to be set. Without it, the gateway logs a warning and always creates a new PR.
 
 ### How It Maps to the Challenge Requirements
 
@@ -174,6 +204,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 | `DEVIN_API_TOKEN` | **Yes** | — | Bearer token for authenticating with the Devin API. Create a service user at [app.devin.ai/settings/service-users](https://app.devin.ai/settings/service-users) and generate an API key. |
 | `DEVIN_ORG_ID` | **Yes** | — | Your Devin organization ID (the `org-...` value on the Service Users page). |
 | `GITHUB_WEBHOOK_SECRET` | No | *(empty)* | When set, the app validates incoming webhooks using HMAC-SHA256. Generate one: `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `GITHUB_TOKEN` | No | *(empty)* | GitHub personal access token with `repo` scope. Required for duplicate PR detection. [Create one here](https://github.com/settings/tokens). |
 | `TARGET_REPO_URL` | No | `https://github.com/torrancefredell/superset` | Fallback repository URL if not present in the webhook payload. |
 | `DEVIN_API_BASE_URL` | No | `https://api.devin.ai/v3` | Override for local development or testing with a mock server. |
 
@@ -215,8 +246,11 @@ Please:
 2. Analyze the insecure code pattern inside the target file
 3. Remediate the vulnerability safely according to modern secure coding principles
 4. Ensure the codebase builds and tests pass
-5. Open a secure Pull Request referencing this automated remediation
+5. Open a Pull Request with the exact title: 'Fix: [Rule Description]'
+6. Include <!-- CODEQL_ALERT:N --> at the bottom of the PR body
 ```
+
+If an existing open PR already addresses the same alert, the prompt instructs Devin to push to the existing branch instead of opening a new PR.
 
 ---
 
