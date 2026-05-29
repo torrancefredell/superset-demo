@@ -70,7 +70,8 @@ def build_remediation_prompt(
         f"3. Remediate the vulnerability safely according to modern "
         f"secure coding principles\n"
         f"4. Ensure the codebase builds and tests pass\n"
-        f"5. Open a secure Pull Request referencing this automated remediation"
+        f"5. Open a Pull Request with the exact title: "
+        f"'Fix: {rule_description}'"
     )
 
 
@@ -109,12 +110,13 @@ async def _handle_code_scanning_alert(payload: dict) -> WebhookResponse:
     alert = payload.get("alert", {})
     rule_description = alert.get("rule", {}).get("description", "Unknown vulnerability")
     alert_url = alert.get("html_url", "")
+    alert_number = alert.get("number")
     file_path = (
         alert.get("most_recent_instance", {})
         .get("location", {})
         .get("path", "unknown")
     )
-    tool_name = payload.get("tool", {}).get("name", "CodeQL")
+    tool_name = alert.get("tool", {}).get("name", "CodeQL")
     repo_url = payload.get("repository", {}).get("html_url", settings.target_repo_url)
 
     prompt = build_remediation_prompt(
@@ -126,7 +128,8 @@ async def _handle_code_scanning_alert(payload: dict) -> WebhookResponse:
     )
 
     logger.info(
-        "Creating Devin session for CodeQL alert: %s in %s",
+        "Creating Devin session for CodeQL alert #%s: %s in %s",
+        alert_number,
         rule_description,
         file_path,
     )
