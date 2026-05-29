@@ -7,7 +7,6 @@ class Settings(BaseSettings):
     devin_api_base_url: str = "https://api.devin.ai/v3"
     github_webhook_secret: str = ""
     target_repo_url: str = "https://github.com/torrancefredell/superset"
-    database_url: str = "sqlite:///./devin_sessions.db"
 
     model_config = {"env_file": ".env"}
 
