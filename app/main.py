@@ -17,7 +17,6 @@ app = FastAPI(
         "Event-driven automation that intercepts CodeQL code_scanning_alert "
         "webhooks and triggers Devin AI sessions to remediate vulnerabilities."
     ),
-    version="2.0.0",
 )
 
 
