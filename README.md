@@ -47,7 +47,7 @@ By connecting CodeQL scanning directly to an AI agent, every newly discovered vu
 
 | Requirement | How This Project Satisfies It |
 |---|---|
-| **Part 2 — Event trigger** | GitHub webhook fires on `code_scanning_alert.created` events from CodeQL → `POST /webhook` |
+| **Part 2 — Event trigger** | GitHub webhook fires on `code_scanning_alert` events (`created` or `reopened_by_user`) from CodeQL → `POST /webhook` |
 | **Part 2 — Programmatic session management** | The app calls `POST /v3/organizations/{org_id}/sessions` with a structured DevSecOps prompt containing the vulnerability type, file path, and alert URL |
 | **Part 2 — Observable outputs** | Devin creates pull requests that remediate the detected vulnerabilities; PRs are visible in the fork |
 | **Deliverable — Docker** | `Dockerfile` + `docker-compose.yml` with a single `docker compose up --build` command |
@@ -59,7 +59,7 @@ By connecting CodeQL scanning directly to an AI agent, every newly discovered vu
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/webhook` | Receives GitHub webhook payloads. Handles `code_scanning_alert`/`created` events, validates HMAC-SHA256 signature, extracts vulnerability details, and creates a Devin remediation session. |
+| `POST` | `/webhook` | Receives GitHub webhook payloads. Handles `code_scanning_alert` events (`created` and `reopened_by_user` actions), validates HMAC-SHA256 signature, extracts vulnerability details, and creates a Devin remediation session. |
 | `GET` | `/health` | Returns `{"status": "ok"}`. Used by Docker healthcheck. |
 
 ---
@@ -200,7 +200,7 @@ ngrok http 8000
 
 ## DevSecOps Prompt
 
-When a `code_scanning_alert` with `action: "created"` arrives, the app constructs a structured prompt for the Devin session:
+When a `code_scanning_alert` with `action: "created"` or `action: "reopened_by_user"` arrives, the app constructs a structured prompt for the Devin session:
 
 ```
 You are a DevSecOps automated remediation agent. A security vulnerability
