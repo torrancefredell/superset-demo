@@ -68,6 +68,9 @@ This means webhook redeliveries and reopened alerts all push to the same branch,
 | **Part 2 — Event trigger** | GitHub webhook fires on `code_scanning_alert` events (`created` or `reopened_by_user`) from CodeQL → `POST /webhook` |
 | **Part 2 — Programmatic session management** | The app calls `POST /v3/organizations/{org_id}/sessions` with a structured DevSecOps prompt containing the vulnerability type, file path, and alert URL |
 | **Part 2 — Observable outputs** | Devin creates pull requests that remediate the detected vulnerabilities; PRs are visible in the fork |
+| **Part 3 — Status of tasks** | Structured `[OBSERVABILITY]` logs record each task's lifecycle: `webhook_received` → `alert_parsed` → `devin_dispatch_start` → `devin_dispatch_success` (with clickable Devin session URL) |
+| **Part 3 — Success/failure signals** | Each dispatch ends in a `devin_dispatch_success` (INFO) or `devin_dispatch_failure` (ERROR) event with the error type and status code |
+| **Part 3 — Throughput / progress tracking** | Every event carries an `alert_number`, so throughput is a one-line query: `docker compose logs \| grep dispatch_success \| wc -l` |
 | **Deliverable — Docker** | `Dockerfile` + `docker-compose.yml` with a single `docker compose up --build` command |
 | **Deliverable — Clear README** | This document |
 
@@ -172,6 +175,60 @@ Expected response:
 ```bash
 docker compose down
 ```
+
+---
+
+## Observability
+
+> *"If I were an engineering leader, how would I know this is working?"*
+
+The gateway is intentionally stateless and token-free, so observability is delivered through **structured application logs** rather than a database-backed dashboard. Every stage of a remediation task emits a single, greppable log line prefixed with `[OBSERVABILITY]` and formatted as flat `key=value` pairs. Stream them live during the demo with:
+
+```bash
+docker compose logs -f
+```
+
+A successful remediation produces this sequence:
+
+```
+[OBSERVABILITY] event=webhook_received github_event=code_scanning_alert action=created
+[OBSERVABILITY] event=alert_parsed alert_number=42 rule="Client-side cross-site scripting" tool=CodeQL file=superset/views/base.py branch=security/alert-42
+[OBSERVABILITY] event=devin_dispatch_start alert_number=42 branch=security/alert-42
+[OBSERVABILITY] event=devin_dispatch_success alert_number=42 session_id=devin-abc123 session_url=https://app.devin.ai/sessions/abc123 elapsed_ms=92
+```
+
+Filtered and failed events are equally explicit:
+
+```
+[OBSERVABILITY] event=webhook_ignored reason=non_actionable_action action=fixed
+[OBSERVABILITY] event=webhook_ignored reason=unhandled_event github_event=issues
+[OBSERVABILITY] event=devin_dispatch_failure alert_number=42 error_type=http_status status_code=502 elapsed_ms=130
+```
+
+### What each signal answers
+
+| Rubric question | Log signal |
+|---|---|
+| **Status of active/completed tasks** | `devin_dispatch_start` (active) and `devin_dispatch_success` (completed, with a clickable `session_url`) |
+| **Success/failure signals** | `devin_dispatch_success` (INFO) vs. `devin_dispatch_failure` (ERROR, with `error_type` and `status_code`) |
+| **Throughput / progress tracking** | Every line carries `alert_number`; count dispatched remediations directly from the stream |
+
+### Lightweight metrics from the log stream
+
+Because the format is consistent, an engineering leader can compute live metrics with one-line shell queries (or route the same lines into Loki / Datadog / CloudWatch for charts):
+
+```bash
+# Total remediations successfully dispatched (throughput)
+docker compose logs | grep -c "event=devin_dispatch_success"
+
+# Failures
+docker compose logs | grep -c "event=devin_dispatch_failure"
+
+# Every alert currently in flight, newest last
+docker compose logs | grep "event=devin_dispatch_start"
+```
+
+The `[OBSERVABILITY]` prefix makes the signal trivial to isolate from framework noise (`grep OBSERVABILITY`), and the flat `key=value` shape is parseable by every major log aggregator without a custom parser.
 
 ---
 
