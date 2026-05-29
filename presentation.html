@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autonomous Security Remediation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-primary: #0a0a0f;
+    --bg-slide: #101018;
+    --bg-card: #16161f;
+    --bg-card-hover: #1c1c28;
+    --accent: #6366f1;
+    --accent-glow: rgba(99, 102, 241, 0.15);
+    --accent-secondary: #818cf8;
+    --text-primary: #f0f0f5;
+    --text-secondary: #9ca3af;
+    --text-muted: #6b7280;
+    --border: rgba(255,255,255,0.06);
+    --success: #34d399;
+    --warning: #fbbf24;
+    --danger: #f87171;
+  }
+
+  html { font-size: 16px; scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Slide Container ── */
+  .slide {
+    width: 100vw;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 4rem 6rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .slide::before {
+    content: '';
+    position: absolute;
+    top: -40%; left: -20%;
+    width: 60vw; height: 60vw;
+    background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .slide > * { position: relative; z-index: 1; }
+
+  .slide-inner {
+    max-width: 1100px;
+    width: 100%;
+  }
+
+  /* ── Slide Numbers ── */
+  .slide-number {
+    position: absolute;
+    bottom: 2rem; right: 3rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  /* ── Typography ── */
+  .eyebrow {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent-secondary);
+    margin-bottom: 1.25rem;
+  }
+
+  h1 {
+    font-size: 3.5rem;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    margin-bottom: 1.5rem;
+  }
+
+  h2 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.025em;
+    margin-bottom: 1rem;
+  }
+
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 0.5rem;
+  }
+
+  .subtitle {
+    font-size: 1.25rem;
+    font-weight: 300;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    max-width: 680px;
+  }
+
+  .lead {
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    max-width: 720px;
+    margin-bottom: 2.5rem;
+  }
+
+  /* ── Accent line ── */
+  .accent-bar {
+    width: 48px; height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin-bottom: 2rem;
+  }
+
+  /* ── Cards ── */
+  .card-grid {
+    display: grid;
+    gap: 1.25rem;
+    margin-top: 2rem;
+  }
+
+  .card-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+  .card-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.75rem;
+    transition: background 0.2s, border-color 0.2s;
+  }
+
+  .card:hover {
+    background: var(--bg-card-hover);
+    border-color: rgba(99,102,241,0.2);
+  }
+
+  .card .icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .card p {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  /* ── Pipeline ── */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin: 2.5rem 0 1rem;
+    flex-wrap: wrap;
+  }
+
+  .pipeline-node {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem 1.75rem;
+    text-align: center;
+    min-width: 170px;
+    transition: border-color 0.2s;
+  }
+
+  .pipeline-node:hover { border-color: var(--accent); }
+
+  .pipeline-node .node-icon { font-size: 1.75rem; margin-bottom: 0.5rem; }
+  .pipeline-node .node-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+  }
+  .pipeline-node .node-sub {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+  }
+
+  .pipeline-arrow {
+    font-size: 1.25rem;
+    color: var(--accent-secondary);
+    padding: 0 0.75rem;
+    flex-shrink: 0;
+  }
+
+  /* ── Stat row ── */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+    margin: 2rem 0;
+  }
+
+  .stat-block {
+    text-align: center;
+    padding: 1.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .stat-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, var(--accent-secondary), var(--success));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 0.25rem;
+  }
+
+  /* ── Comparison table ── */
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+    margin: 2rem 0;
+  }
+
+  .comparison-col {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.75rem;
+  }
+
+  .comparison-col.negative { border-top: 3px solid var(--danger); }
+  .comparison-col.positive { border-top: 3px solid var(--success); }
+
+  .comparison-col h3 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 1rem;
+  }
+
+  .comparison-col.negative h3 { color: var(--danger); }
+  .comparison-col.positive h3 { color: var(--success); }
+
+  .comparison-col ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .comparison-col li {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    padding: 0.4rem 0;
+    padding-left: 1.25rem;
+    position: relative;
+    line-height: 1.5;
+  }
+
+  .comparison-col li::before {
+    position: absolute;
+    left: 0;
+    font-size: 0.75rem;
+  }
+
+  .comparison-col.negative li::before { content: '✕'; color: var(--danger); }
+  .comparison-col.positive li::before { content: '✓'; color: var(--success); }
+
+  /* ── Title slide specifics ── */
+  .title-slide {
+    text-align: center;
+    align-items: center;
+  }
+
+  .title-slide h1 {
+    font-size: 4rem;
+    background: linear-gradient(135deg, #f0f0f5 30%, var(--accent-secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .title-meta {
+    display: flex;
+    gap: 2rem;
+    margin-top: 2rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+  }
+
+  .title-meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+  /* ── Demo placeholder ── */
+  .demo-frame {
+    width: 100%;
+    max-width: 900px;
+    aspect-ratio: 16/9;
+    background: var(--bg-card);
+    border: 2px dashed rgba(99,102,241,0.3);
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 2rem auto;
+  }
+
+  .demo-frame .play-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.6;
+  }
+
+  .demo-frame p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  /* ── Q&A slide ── */
+  .qa-slide {
+    text-align: center;
+  }
+
+  .qa-slide h1 {
+    font-size: 5rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--accent-secondary), var(--success));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 1rem;
+  }
+
+  /* ── Loop diagram ── */
+  .loop-visual {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin: 2.5rem 0 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .loop-step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .loop-step .step-num {
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .loop-arrow {
+    color: var(--accent-secondary);
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  /* ── Dividers ── */
+  .divider {
+    width: 100vw;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Footer branding ── */
+  .slide-brand {
+    position: absolute;
+    bottom: 2rem; left: 3rem;
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .slide { padding: 2rem 1.5rem; }
+    h1 { font-size: 2.25rem; }
+    h2 { font-size: 1.75rem; }
+    .card-grid.cols-2, .card-grid.cols-3 { grid-template-columns: 1fr; }
+    .comparison { grid-template-columns: 1fr; }
+    .stat-row { grid-template-columns: 1fr; }
+    .pipeline { flex-direction: column; }
+    .pipeline-arrow { transform: rotate(90deg); }
+    .title-slide h1 { font-size: 2.5rem; }
+    .qa-slide h1 { font-size: 3rem; }
+    .loop-visual { flex-direction: column; }
+    .loop-arrow { transform: rotate(90deg); }
+  }
+
+  /* ── Print / screenshot mode ── */
+  @media print {
+    .slide { page-break-after: always; min-height: 100vh; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SLIDE 1 — TITLE                                        -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="slide title-slide">
+  <div class="slide-inner" style="display:flex;flex-direction:column;align-items:center;">
+    <div class="eyebrow">Engineering Leadership Briefing</div>
+    <h1>Autonomous Security<br>Remediation</h1>
+    <p class="subtitle" style="text-align:center;">
+      Transforming security debt from a manual bottleneck<br>into an automated utility.
+    </p>
+    <div class="title-meta">
+      <span>Torrance Fredell</span>
+      <span>·</span>
+      <span>Powered by Devin AI</span>
+    </div>
+  </div>
+  <span class="slide-number">01 / 08</span>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SLIDE 2 — WHAT IS DEVIN?                               -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="eyebrow">Meet the Agent</div>
+    <h2>What Is Devin?</h2>
+    <div class="accent-bar"></div>
+    <p class="lead">
+      Devin is not autocomplete. It is a <strong>cloud-native remote coworker</strong>&mdash;an
+      asynchronous software engineer that manages its own VM, terminal, browser,
+      and development environment.
+    </p>
+    <div class="card-grid cols-3">
+      <div class="card">
+        <div class="icon">🖥️</div>
+        <h3>Own Environment</h3>
+        <p>Spins up an isolated VM with shell access, file system, and a full browser&mdash;no shared context, no side effects.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔄</div>
+        <h3>Fully Asynchronous</h3>
+        <p>Runs in the background while your team ships features. Picks up work from an API call; delivers Pull Requests.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔗</div>
+        <h3>API-Driven</h3>
+        <p>Programmatically create sessions, pass structured prompts, and orchestrate work&mdash;just like any microservice.</p>
+      </div>
+    </div>
+  </div>
+  <span class="slide-brand">Autonomous Security Remediation</span>
+  <span class="slide-number">02 / 08</span>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SLIDE 3 — THE PROBLEM                                  -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="eyebrow">The Problem</div>
+    <h2>Security vs. Velocity</h2>
+    <div class="accent-bar"></div>
+    <p class="lead">
+      Security debt is the invisible tax on every sprint. Every alert that sits in a backlog 
+      is a <strong>sprint killer</strong> for the engineers pulled off feature work&mdash;and a 
+      <strong>token burner</strong> for the organization paying senior talent to write boilerplate fixes.
+    </p>
+
+    <div class="comparison">
+      <div class="comparison-col negative">
+        <h3>Today&rsquo;s Reality</h3>
+        <ul>
+          <li>CodeQL fires an alert at 2 AM&mdash;sits untriaged for days</li>
+          <li>Senior engineer context-switches off green-field feature work</li>
+          <li>Spends 45 min reading the advisory, 10 min writing the fix</li>
+          <li>Brown-field maintenance erodes team morale and velocity</li>
+          <li>Repeat across dozens of alerts per quarter</li>
+        </ul>
+      </div>
+      <div class="comparison-col positive">
+        <h3>The Opportunity</h3>
+        <ul>
+          <li>80% of security fixes are deterministic and well-documented</li>
+          <li>Pattern: read advisory → locate code → apply known fix → test</li>
+          <li>This is exactly the work agents excel at</li>
+          <li>Engineers stay in flow on high-value feature development</li>
+          <li>Security becomes a utility, not an interrupt</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <span class="slide-brand">Autonomous Security Remediation</span>
+  <span class="slide-number">03 / 08</span>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SLIDE 4 — TECH STACK                                   -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="eyebrow">Architecture</div>
+    <h2>The Event Loop</h2>
+    <div class="accent-bar"></div>
+    <p class="lead">
+      A fully automated pipeline from vulnerability detection to verified Pull Request.
+      Zero human intervention required.
+    </p>
+
+    <div class="pipeline">
+      <div class="pipeline-node">
+        <div class="node-icon">🛡️</div>
+        <div class="node-label">CodeQL</div>
+        <div class="node-sub">Static Analysis</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node">
+        <div class="node-icon">⚡</div>
+        <div class="node-label">GitHub Webhook</div>
+        <div class="node-sub">code_scanning_alert</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node">
+        <div class="node-icon">🔀</div>
+        <div class="node-label">FastAPI Gateway</div>
+        <div class="node-sub">Async Routing</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node">
+        <div class="node-icon">🤖</div>
+        <div class="node-label">Devin API</div>
+        <div class="node-sub">Session Creation</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node">
+        <div class="node-icon">📋</div>
+        <div class="node-label">GitHub PR</div>
+        <div class="node-sub">Verified Fix</div>
+      </div>
+    </div>
+
+    <div class="card-grid cols-2" style="margin-top:2rem;">
+      <div class="card">
+        <h3>Payload Intelligence</h3>
+        <p>Extracts vulnerability type, file path, tool name, and alert URL from the CodeQL schema. Builds a structured DevSecOps prompt with exact PR title conventions.</p>
+      </div>
+      <div class="card">
+        <h3>Safety by Design</h3>
+        <p>HMAC-SHA256 signature verification. Async non-blocking I/O. Action filtering ensures only <code>created</code> and <code>reopened</code> alerts are processed.</p>
+      </div>
+    </div>
+  </div>
+  <span class="slide-brand">Autonomous Security Remediation</span>
+  <span class="slide-number">04 / 08</span>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SLIDE 5 — IMPACT                                       -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="eyebrow">Impact</div>
+    <h2>What This Unlocks</h2>
+    <div class="accent-bar"></div>
+
+    <div class="stat-row">
+      <div class="stat-block">
+        <div class="stat-value">0</div>
+        <div class="stat-label">Engineer Hours per Alert</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-value">&lt;5m</div>
+        <div class="stat-label">Alert to Pull Request</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-value">24/7</div>
+        <div class="stat-label">Coverage Window</div>
+      </div>
+    </div>
+
+    <div class="card-grid cols-3">
+      <div class="card">
+        <div class="icon">🎯</div>
+        <h3>Reclaimed Capacity</h3>
+        <p>Engineers stay on green-field feature work. Brown-field security maintenance runs in the background.</p>
+      </div>
+      <div class="card">
+        <div class="icon">📉</div>
+        <h3>Reduced MTTR</h3>
+        <p>Mean time to remediation drops from days to minutes. No triage queue, no context switching.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔍</div>
+        <h3>Audit Trail</h3>
+        <p>Every fix is a traceable PR linked to the original CodeQL alert. Full provenance for compliance reviews.</p>
+      </div>
+    </div>
+  </div>
+  <span class="slide-brand">Autonomous Security Remediation</span>
+  <span class="slide-number">05 / 08</span>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SLIDE 6 — DEMO                                         -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="slide-inner" style="display:flex;flex-direction:column;align-items:center;">
+    <div class="eyebrow">Live Walkthrough</div>
+    <h2 style="text-align:center;">The Demo</h2>
+    <div class="accent-bar" style="margin-left:auto;margin-right:auto;"></div>
+
+    <div class="demo-frame">
+      <div class="play-icon">▶</div>
+      <p>Live demo &mdash; CodeQL alert triggers autonomous remediation</p>
+    </div>
+
+    <div class="loop-visual">
+      <div class="loop-step"><span class="step-num">1</span> CodeQL detects vulnerability</div>
+      <div class="loop-arrow">→</div>
+      <div class="loop-step"><span class="step-num">2</span> Webhook hits FastAPI gateway</div>
+      <div class="loop-arrow">→</div>
+      <div class="loop-step"><span class="step-num">3</span> Devin session spins up</div>
+      <div class="loop-arrow">→</div>
+      <div class="loop-step"><span class="step-num">4</span> PR opened with fix</div>
+    </div>
+  </div>
+  <span class="slide-brand">Autonomous Security Remediation</span>
+  <span class="slide-number">06 / 08</span>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SLIDE 7 — THE SOLUTION                                 -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="eyebrow">Closing the Loop</div>
+    <h2>The Solution</h2>
+    <div class="accent-bar"></div>
+    <p class="lead">
+      Security is no longer a queue. It is a closed-loop system that <strong>detects, dispatches,
+      remediates, and delivers</strong>&mdash;without pulling a single engineer off their roadmap.
+    </p>
+
+    <div class="card-grid cols-2">
+      <div class="card">
+        <div class="icon">⚙️</div>
+        <h3>Detect &amp; Dispatch</h3>
+        <p>CodeQL scans run on every push. Alerts fire webhooks in real time. The gateway validates, extracts metadata, and dispatches to Devin within seconds.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔧</div>
+        <h3>Remediate &amp; Deliver</h3>
+        <p>Devin clones the repo, analyzes the vulnerability pattern, applies the fix, runs tests, and opens a PR titled <em>Fix: [Vulnerability Name]</em>.</p>
+      </div>
+    </div>
+
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:1.75rem;margin-top:1.5rem;text-align:center;">
+      <p style="font-size:1.1rem;font-weight:500;color:var(--text-primary);line-height:1.6;">
+        &ldquo;We turned security from a <span style="color:var(--danger);">reactive interrupt</span>
+        into a <span style="color:var(--success);">proactive utility</span>.&rdquo;
+      </p>
+    </div>
+  </div>
+  <span class="slide-brand">Autonomous Security Remediation</span>
+  <span class="slide-number">07 / 08</span>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SLIDE 8 — Q&A                                          -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="slide qa-slide">
+  <div class="slide-inner" style="display:flex;flex-direction:column;align-items:center;">
+    <h1>Q&amp;A</h1>
+    <p class="subtitle" style="text-align:center;margin-bottom:2rem;">
+      Let&rsquo;s discuss the architecture, the tradeoffs, and what comes next.
+    </p>
+    <div class="title-meta">
+      <span>Torrance Fredell</span>
+      <span>·</span>
+      <span>github.com/torrancefredell/superset-demo</span>
+    </div>
+  </div>
+  <span class="slide-brand">Autonomous Security Remediation</span>
+  <span class="slide-number">08 / 08</span>
+</section>
+
+</body>
+</html>
