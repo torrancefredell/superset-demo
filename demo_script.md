@@ -91,7 +91,7 @@
 
 ## Phase 5: The ROI Mic Drop
 
-**[4:30 – 5:00]**
+**[4:30 – 4:40]**
 
 *Advance to the impact slide or speak directly to camera.*
 
@@ -105,7 +105,25 @@
 >
 > The gateway is stateless. The architecture is token-free. The output is clean, standardized, and auditable. And the entire system fits in a single Docker container.
 >
-> I'm happy to take questions — on the architecture, the tradeoffs, or where this goes next."
+> And that brings me to what comes next."
+
+*Advance to the "From POC to Production Rollout" slide.*
+
+---
+
+## Phase 6: From POC to Production & Q&A
+
+**[4:40 – 5:00]**
+
+> "What we've shown you today is a highly successful proof of concept. As we transition this from a POC into full production rollout, our roadmap focuses on driving massive code-remediation impact while building a trusted partnership.
+>
+> First, we will expand Devin's footprint by connecting it to more repositories and triggering automated historical sweeps. You will literally watch Devin continuously clear out old security issues in the background — without developer intervention.
+>
+> Second, we will scale our safety framework by introducing Multi-Agent Guardrails — where a second Devin instance acts as an automated peer-reviewer to audit patches before a human ever sees them.
+>
+> And finally — most importantly — this is not a handoff. We will work closely, hand-in-hand with your engineering teams to integrate these agents seamlessly into your existing workflows.
+>
+> I'm happy to take questions — on the architecture, the roadmap, or how we'd roll this into your organization."
 
 *Advance to the Q&A slide. Smile. Wait.*
 
