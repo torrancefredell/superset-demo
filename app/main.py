@@ -1,7 +1,6 @@
 import hashlib
 import hmac
 import logging
-import time
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Request
@@ -195,10 +194,10 @@ async def _handle_code_scanning_alert(payload: dict) -> WebhookResponse:
     _log_event(
         logging.INFO,
         "devin_dispatch_start",
+        status="dispatching",
         alert_number=alert_number,
         branch=branch_name,
     )
-    start = time.monotonic()
 
     try:
         devin_response = await call_devin_api(prompt)
@@ -206,10 +205,10 @@ async def _handle_code_scanning_alert(payload: dict) -> WebhookResponse:
         _log_event(
             logging.ERROR,
             "devin_dispatch_failure",
+            status="failed",
             alert_number=alert_number,
             error_type="http_status",
             status_code=exc.response.status_code,
-            elapsed_ms=round((time.monotonic() - start) * 1000),
         )
         raise HTTPException(
             status_code=502,
@@ -219,9 +218,9 @@ async def _handle_code_scanning_alert(payload: dict) -> WebhookResponse:
         _log_event(
             logging.ERROR,
             "devin_dispatch_failure",
+            status="failed",
             alert_number=alert_number,
             error_type="request_error",
-            elapsed_ms=round((time.monotonic() - start) * 1000),
         )
         raise HTTPException(
             status_code=502,
@@ -234,10 +233,10 @@ async def _handle_code_scanning_alert(payload: dict) -> WebhookResponse:
     _log_event(
         logging.INFO,
         "devin_dispatch_success",
+        status="dispatched",
         alert_number=alert_number,
         session_id=devin_session_id,
         session_url=devin_session_url,
-        elapsed_ms=round((time.monotonic() - start) * 1000),
     )
 
     return WebhookResponse(

@@ -193,8 +193,8 @@ A successful remediation produces this sequence:
 ```
 [OBSERVABILITY] event=webhook_received github_event=code_scanning_alert action=created
 [OBSERVABILITY] event=alert_parsed alert_number=42 rule="Client-side cross-site scripting" tool=CodeQL file=superset/views/base.py branch=security/alert-42
-[OBSERVABILITY] event=devin_dispatch_start alert_number=42 branch=security/alert-42
-[OBSERVABILITY] event=devin_dispatch_success alert_number=42 session_id=devin-abc123 session_url=https://app.devin.ai/sessions/abc123 elapsed_ms=92
+[OBSERVABILITY] event=devin_dispatch_start status=dispatching alert_number=42 branch=security/alert-42
+[OBSERVABILITY] event=devin_dispatch_success status=dispatched alert_number=42 session_id=devin-abc123 session_url=https://app.devin.ai/sessions/abc123
 ```
 
 Filtered and failed events are equally explicit:
@@ -202,7 +202,7 @@ Filtered and failed events are equally explicit:
 ```
 [OBSERVABILITY] event=webhook_ignored reason=non_actionable_action action=fixed
 [OBSERVABILITY] event=webhook_ignored reason=unhandled_event github_event=issues
-[OBSERVABILITY] event=devin_dispatch_failure alert_number=42 error_type=http_status status_code=502 elapsed_ms=130
+[OBSERVABILITY] event=devin_dispatch_failure status=failed alert_number=42 error_type=http_status status_code=502
 ```
 
 ### What each signal answers
