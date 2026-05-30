@@ -107,7 +107,7 @@
 >
 > And that brings me to what comes next."
 
-*Advance to the "From POC to Production Rollout" slide.*
+*Advance to the "The Path to Implementation: A Collaborative Pilot" slide.*
 
 ---
 
@@ -115,15 +115,15 @@
 
 **[4:40 – 5:00]**
 
-> "What we've shown you today is a highly successful proof of concept. As we transition this from a POC into full production rollout, our roadmap focuses on driving massive code-remediation impact while building a trusted partnership.
+> "What we've built today is a successful proof of concept. To take this into full production rollout, we want to look at the next steps as a collaborative pilot.
 >
-> First, we will expand Devin's footprint by connecting it to more repositories and triggering automated historical sweeps. You will literally watch Devin continuously clear out old security issues in the background — without developer intervention.
+> First, we want to sit down with your team to select 3 to 4 direct use cases and specific pain points unique to your organization. From there, we'll run a targeted Proof of Concept with Devin to tackle those exact issues.
 >
-> Second, we will scale our safety framework by introducing Multi-Agent Guardrails — where a second Devin instance acts as an automated peer-reviewer to audit patches before a human ever sees them.
+> After several weeks, we can evaluate the actual ROI generated, and use those concrete results to confidently roll Devin out to more developers and broader use cases.
 >
-> And finally — most importantly — this is not a handoff. We will work closely, hand-in-hand with your engineering teams to integrate these agents seamlessly into your existing workflows.
+> And finally, this is not a handoff. Our team will work hand-in-hand with your engineers to align this pilot seamlessly with your existing workflows.
 >
-> I'm happy to take questions — on the architecture, the roadmap, or how we'd roll this into your organization."
+> I'm happy to take questions — on the architecture, the pilot, or how we'd roll this into your organization."
 
 *Advance to the Q&A slide. Smile. Wait.*
 
